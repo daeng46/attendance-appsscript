@@ -15,6 +15,7 @@
         input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; }
         button { width: 100%; padding: 14px; margin: 8px 0; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
         button:active { transform: scale(0.97); }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
         .btn-primary { background: #4CAF50; color: white; }
         .btn-danger { background: #ff6b6b; color: white; }
         .btn-info { background: #4ecdc4; color: white; }
@@ -72,7 +73,8 @@
 
 <script>
     // ============ KONFIGURASI ============
-    const APP_URL = 'https://script.google.com/macros/s/AKfycbz22iwzto9iY6sxAprrZWLbOh3b2f96ngyLLCLbJtvZaSs9s-DzPdd-xreAeJxH6EC-/exec'; // GANTI dengan URL deploy Anda
+    // ⚠️ GANTI dengan URL Apps Script Anda (setelah deploy ulang)
+    const APP_URL = 'https://script.google.com/macros/s/AKfycbwByzxerrN9sNJ6YcLyxAcIRPf2qQ6mkF7EB_R7zyBflNUiruJwNEeziOgM9c0DrKv-/exec';
     
     // ============ GLOBAL VARIABLES ============
     let sessionToken = null;
@@ -85,7 +87,7 @@
         localStorage.setItem('deviceId', deviceId);
     }
     
-    // ============ LOGIN ============
+    // ============ LOGIN (GET Method - CORS Friendly) ============
     async function login() {
         const email = document.getElementById('emailInput').value.trim();
         if (!email) {
@@ -96,19 +98,22 @@
         const btn = event.target;
         btn.textContent = '⏳ Loading...';
         btn.disabled = true;
+        document.getElementById('loginStatus').innerHTML = '';
         
         try {
-            const response = await fetch(APP_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'login',
-                    email: email,
-                    deviceId: deviceId
-                }),
-                headers: { 'Content-Type': 'application/json' }
+            // 🔥 Login menggunakan GET (lebih aman untuk CORS)
+            const url = `${APP_URL}?action=login&email=${encodeURIComponent(email)}&deviceId=${encodeURIComponent(deviceId)}`;
+            console.log('📤 Login URL:', url);
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                }
             });
             
             const data = await response.json();
+            console.log('📥 Login Response:', data);
             
             if (data.success) {
                 sessionToken = data.sessionToken;
@@ -139,7 +144,9 @@
                 document.getElementById('loginStatus').innerHTML = '❌ ' + data.error;
             }
         } catch (err) {
+            console.error('❌ Login Error:', err);
             showStatus('❌ Error koneksi: ' + err.message, 'error');
+            document.getElementById('loginStatus').innerHTML = '❌ Error: ' + err.message;
         }
         
         btn.textContent = '🔑 Login';
@@ -155,7 +162,10 @@
             }
             navigator.geolocation.getCurrentPosition(
                 pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-                err => resolve(null),
+                err => {
+                    console.warn('📍 Location error:', err.message);
+                    resolve(null);
+                },
                 { enableHighAccuracy: true, timeout: 15000 }
             );
         });
@@ -173,7 +183,6 @@
                 video.srcObject = stream;
                 await video.play();
                 
-                // Tunggu 1 detik untuk posisi
                 await new Promise(r => setTimeout(r, 1000));
                 
                 const canvas = document.createElement('canvas');
@@ -184,13 +193,14 @@
                 
                 resolve(canvas.toDataURL('image/jpeg', 0.7));
             } catch (err) {
+                console.error('📸 Camera error:', err);
                 alert('❌ Gagal akses kamera: ' + err.message + '\nPastikan izin kamera diberikan.');
                 resolve(null);
             }
         });
     }
     
-    // ============ CHECK-IN ============
+    // ============ CHECK-IN (POST) ============
     async function checkIn() {
         if (!sessionToken) {
             showStatus('Login dulu!', 'error');
@@ -234,10 +244,15 @@
                     lng: loc.lng,
                     deviceId: deviceId
                 }),
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
             });
             
             const data = await response.json();
+            console.log('📥 Check-in Response:', data);
+            
             if (data.success) {
                 showStatus('✅ ' + data.message, 'success');
                 if (data.photoUrl) {
@@ -249,6 +264,7 @@
                 showStatus('❌ ' + data.error, 'error');
             }
         } catch (err) {
+            console.error('❌ Check-in error:', err);
             showStatus('❌ Error: ' + err.message, 'error');
         }
         
@@ -256,7 +272,7 @@
         btn.disabled = false;
     }
     
-    // ============ CHECK-OUT ============
+    // ============ CHECK-OUT (POST) ============
     async function checkOut() {
         if (!sessionToken) {
             showStatus('Login dulu!', 'error');
@@ -297,13 +313,17 @@
                     sessionToken: sessionToken,
                     selfie: selfie,
                     lat: loc.lat,
-                    lng: loc.lng,
-                    deviceId: deviceId
+                    lng: loc.lng
                 }),
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
             });
             
             const data = await response.json();
+            console.log('📥 Check-out Response:', data);
+            
             if (data.success) {
                 showStatus('✅ ' + data.message, 'success');
                 if (data.photoUrl) {
@@ -315,6 +335,7 @@
                 showStatus('❌ ' + data.error, 'error');
             }
         } catch (err) {
+            console.error('❌ Check-out error:', err);
             showStatus('❌ Error: ' + err.message, 'error');
         }
         
@@ -322,7 +343,7 @@
         btn.disabled = false;
     }
     
-    // ============ VIEW MY ATTENDANCE ============
+    // ============ VIEW MY ATTENDANCE (GET) ============
     async function viewMyAttendance() {
         if (!sessionToken) {
             showStatus('Login dulu!', 'error');
@@ -336,18 +357,18 @@
         
         try {
             const now = new Date();
-            const response = await fetch(APP_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'getMyAttendance',
-                    sessionToken: sessionToken,
-                    month: now.getMonth() + 1,
-                    year: now.getFullYear()
-                }),
-                headers: { 'Content-Type': 'application/json' }
+            const url = `${APP_URL}?action=getMyAttendance&sessionToken=${encodeURIComponent(sessionToken)}&month=${now.getMonth() + 1}&year=${now.getFullYear()}`;
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                }
             });
             
             const data = await response.json();
+            console.log('📥 Attendance Response:', data);
+            
             if (data.success) {
                 renderAttendance(data.attendance, data.stats);
                 showStatus('✅ Data absensi ditemukan: ' + data.attendance.length + ' record', 'success');
@@ -355,6 +376,7 @@
                 showStatus('❌ ' + data.error, 'error');
             }
         } catch (err) {
+            console.error('❌ Attendance error:', err);
             showStatus('❌ Error: ' + err.message, 'error');
         }
         
@@ -362,7 +384,7 @@
         btn.disabled = false;
     }
     
-    // ============ VIEW ALL ATTENDANCE (ADMIN) ============
+    // ============ VIEW ALL ATTENDANCE (GET - ADMIN ONLY) ============
     async function viewAllAttendance() {
         if (!sessionToken) {
             showStatus('Login dulu!', 'error');
@@ -376,18 +398,18 @@
         
         try {
             const now = new Date();
-            const response = await fetch(APP_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'getAllAttendance',
-                    sessionToken: sessionToken,
-                    month: now.getMonth() + 1,
-                    year: now.getFullYear()
-                }),
-                headers: { 'Content-Type': 'application/json' }
+            const url = `${APP_URL}?action=getAllAttendance&sessionToken=${encodeURIComponent(sessionToken)}&month=${now.getMonth() + 1}&year=${now.getFullYear()}`;
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                }
             });
             
             const data = await response.json();
+            console.log('📥 All Attendance Response:', data);
+            
             if (data.success) {
                 renderAllAttendance(data.data);
                 showStatus('✅ Total ' + data.total + ' record', 'success');
@@ -395,6 +417,7 @@
                 showStatus('❌ ' + data.error, 'error');
             }
         } catch (err) {
+            console.error('❌ All Attendance error:', err);
             showStatus('❌ Error: ' + err.message, 'error');
         }
         
@@ -472,7 +495,6 @@
         el.className = type || 'info';
         el.style.display = 'block';
         
-        // Auto hide after 10 seconds
         clearTimeout(el._timeout);
         el._timeout = setTimeout(() => {
             el.style.display = 'none';
@@ -488,9 +510,10 @@
     document.addEventListener('DOMContentLoaded', function() {
         console.log('📱 Absensi App Ready');
         console.log('🆔 Device ID:', deviceId);
+        console.log('📍 APP_URL:', APP_URL);
     });
     
-    // Tombol Enter untuk login
+    // ============ ENTER KEY FOR LOGIN ============
     document.getElementById('emailInput').addEventListener('keypress', function(e) {
         if (e.key === 'Enter') login();
     });
