@@ -71,8 +71,7 @@
 
 <script>
     // ============ KONFIGURASI ============
-    // ⚠️ GANTI dengan URL Apps Script Anda (setelah deploy ulang)
-    const APP_URL = 'https://script.google.com/macros/s/AKfycbwzsecyNGaafFusvXCNJ0RpnFqMD-K_Wpj5uu_8gnP-r3cB1whYyIzVzYbnTDkNh_vp/exec';
+    const APP_URL = 'https://script.google.com/macros/s/AKfycbwXy0hHrpszd-e4YDvSx6zdQ5rAOJHlGsNcemQE0NfdWEUzV8f2Ag68IBCqFcWliNNl/exec';
     
     // ============ GLOBAL VARIABLES ============
     let sessionToken = null;
@@ -85,7 +84,7 @@
         localStorage.setItem('deviceId', deviceId);
     }
     
-    // ============ LOGIN (POST Method) ============
+    // ============ LOGIN (GET + no-cors) ============
     async function login() {
         const email = document.getElementById('emailInput').value.trim();
         if (!email) {
@@ -99,60 +98,83 @@
         document.getElementById('loginStatus').innerHTML = '';
         
         try {
-            console.log('📤 Login Request:', { email, deviceId });
+            const url = `${APP_URL}?action=login&email=${encodeURIComponent(email)}&deviceId=${encodeURIComponent(deviceId)}`;
+            console.log('📤 Login URL:', url);
             
-            const response = await fetch(APP_URL, {
-                method: 'POST',
+            // 🔥 KUNCI: pakai mode: 'no-cors'
+            const response = await fetch(url, {
+                method: 'GET',
+                mode: 'no-cors',
                 headers: {
-                    'Content-Type': 'application/json',
                     'Accept': 'application/json'
-                },
-                body: JSON.stringify({
-                    action: 'login',
-                    email: email,
-                    deviceId: deviceId
-                })
+                }
             });
             
-            const data = await response.json();
-            console.log('📥 Login Response:', data);
+            // ⚠️ Dengan no-cors, response tidak bisa dibaca (opaque)
+            // Kita harus parse dari URL atau gunakan cara lain
+            console.log('📥 Response (no-cors):', response);
             
-            if (data.success) {
-                sessionToken = data.sessionToken;
-                userRole = data.user.role;
-                userId = data.user.id;
-                userName = data.user.name;
+            // Karena no-cors tidak bisa baca response, kita coba fetch ulang tanpa no-cors
+            // Tapi kali ini dengan mode biasa (cors)
+            try {
+                const response2 = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                const data = await response2.json();
+                console.log('📥 Login Response:', data);
                 
-                document.getElementById('loginSection').classList.add('hidden');
-                document.getElementById('mainSection').classList.remove('hidden');
-                
-                document.getElementById('userInfo').innerHTML = `
-                    👤 <strong>${data.user.name}</strong> (${data.user.jabatan})
-                `;
-                document.getElementById('roleBadge').innerHTML = `
-                    🔑 Role: <span class="badge ${data.user.role === 'Admin' ? 'badge-admin' : 'badge-user'}">${data.user.role}</span>
-                `;
-                
-                if (userRole === 'Admin') {
-                    document.querySelectorAll('.admin-only').forEach(el => {
-                        el.style.display = 'block';
-                    });
+                if (data.success) {
+                    handleLoginSuccess(data);
+                } else {
+                    showStatus('❌ ' + data.error, 'error');
+                    document.getElementById('loginStatus').innerHTML = '❌ ' + data.error;
                 }
-                
-                showStatus('✅ Login berhasil! Selamat datang ' + data.user.name, 'success');
-                document.getElementById('loginStatus').innerHTML = '';
-            } else {
-                showStatus('❌ ' + data.error, 'error');
-                document.getElementById('loginStatus').innerHTML = '❌ ' + data.error;
+            } catch (corsError) {
+                // Jika CORS tetap error, kita coba pakai JSONP atau proxy
+                console.warn('CORS still error, trying alternative...');
+                // Coba akses langsung ke URL di browser baru
+                window.open(url, '_blank');
+                showStatus('⚠️ CORS Error. Buka link di tab baru untuk login.', 'info');
+                document.getElementById('loginStatus').innerHTML = '⚠️ Buka link di tab baru untuk melanjutkan login.';
             }
+            
         } catch (err) {
             console.error('❌ Login Error:', err);
-            showStatus('❌ Error koneksi: ' + err.message, 'error');
+            showStatus('❌ Error: ' + err.message, 'error');
             document.getElementById('loginStatus').innerHTML = '❌ Error: ' + err.message;
         }
         
         btn.textContent = '🔑 Login';
         btn.disabled = false;
+    }
+    
+    function handleLoginSuccess(data) {
+        sessionToken = data.sessionToken;
+        userRole = data.user.role;
+        userId = data.user.id;
+        userName = data.user.name;
+        
+        document.getElementById('loginSection').classList.add('hidden');
+        document.getElementById('mainSection').classList.remove('hidden');
+        
+        document.getElementById('userInfo').innerHTML = `
+            👤 <strong>${data.user.name}</strong> (${data.user.jabatan})
+        `;
+        document.getElementById('roleBadge').innerHTML = `
+            🔑 Role: <span class="badge ${data.user.role === 'Admin' ? 'badge-admin' : 'badge-user'}">${data.user.role}</span>
+        `;
+        
+        if (userRole === 'Admin') {
+            document.querySelectorAll('.admin-only').forEach(el => {
+                el.style.display = 'block';
+            });
+        }
+        
+        showStatus('✅ Login berhasil! Selamat datang ' + data.user.name, 'success');
+        document.getElementById('loginStatus').innerHTML = '';
     }
     
     // ============ GET LOCATION ============
@@ -202,7 +224,7 @@
         });
     }
     
-    // ============ CHECK-IN ============
+    // ============ CHECK-IN (GET + no-cors) ============
     async function checkIn() {
         if (!sessionToken) {
             showStatus('Login dulu!', 'error');
@@ -236,35 +258,17 @@
         showStatus('⏳ Menyimpan data absen...', 'info');
         
         try {
-            const response = await fetch(APP_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'checkin',
-                    sessionToken: sessionToken,
-                    selfie: selfie,
-                    lat: loc.lat,
-                    lng: loc.lng,
-                    deviceId: deviceId
-                }),
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
+            // Kirim foto via GET (URL encoding) - untuk testing kecil
+            // Untuk production, lebih baik pakai POST dengan mode no-cors
+            const url = `${APP_URL}?action=checkin&sessionToken=${encodeURIComponent(sessionToken)}&selfie=${encodeURIComponent(selfie)}&lat=${loc.lat}&lng=${loc.lng}&deviceId=${encodeURIComponent(deviceId)}`;
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                mode: 'no-cors'
             });
             
-            const data = await response.json();
-            console.log('📥 Check-in Response:', data);
+            showStatus('✅ Check-in dikirim! (Cek spreadsheet untuk verifikasi)', 'success');
             
-            if (data.success) {
-                showStatus('✅ ' + data.message, 'success');
-                if (data.photoUrl) {
-                    document.getElementById('lastPhoto').innerHTML = 
-                        '<p style="font-size:12px;color:#666;margin-top:5px;">📸 Foto bukti check-in:</p>' +
-                        '<img src="' + data.photoUrl + '" onerror="this.style.display=\'none\'">';
-                }
-            } else {
-                showStatus('❌ ' + data.error, 'error');
-            }
         } catch (err) {
             console.error('❌ Check-in error:', err);
             showStatus('❌ Error: ' + err.message, 'error');
@@ -274,7 +278,7 @@
         btn.disabled = false;
     }
     
-    // ============ CHECK-OUT ============
+    // ============ CHECK-OUT (GET + no-cors) ============
     async function checkOut() {
         if (!sessionToken) {
             showStatus('Login dulu!', 'error');
@@ -308,34 +312,15 @@
         showStatus('⏳ Menyimpan data check-out...', 'info');
         
         try {
-            const response = await fetch(APP_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'checkout',
-                    sessionToken: sessionToken,
-                    selfie: selfie,
-                    lat: loc.lat,
-                    lng: loc.lng
-                }),
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
+            const url = `${APP_URL}?action=checkout&sessionToken=${encodeURIComponent(sessionToken)}&selfie=${encodeURIComponent(selfie)}&lat=${loc.lat}&lng=${loc.lng}`;
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                mode: 'no-cors'
             });
             
-            const data = await response.json();
-            console.log('📥 Check-out Response:', data);
+            showStatus('✅ Check-out dikirim! (Cek spreadsheet untuk verifikasi)', 'success');
             
-            if (data.success) {
-                showStatus('✅ ' + data.message, 'success');
-                if (data.photoUrl) {
-                    document.getElementById('lastPhoto').innerHTML = 
-                        '<p style="font-size:12px;color:#666;margin-top:5px;">📸 Foto bukti check-out:</p>' +
-                        '<img src="' + data.photoUrl + '" onerror="this.style.display=\'none\'">';
-                }
-            } else {
-                showStatus('❌ ' + data.error, 'error');
-            }
         } catch (err) {
             console.error('❌ Check-out error:', err);
             showStatus('❌ Error: ' + err.message, 'error');
@@ -345,7 +330,7 @@
         btn.disabled = false;
     }
     
-    // ============ VIEW MY ATTENDANCE ============
+    // ============ VIEW MY ATTENDANCE (GET) ============
     async function viewMyAttendance() {
         if (!sessionToken) {
             showStatus('Login dulu!', 'error');
@@ -359,16 +344,11 @@
         
         try {
             const now = new Date();
-            const response = await fetch(APP_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'getMyAttendance',
-                    sessionToken: sessionToken,
-                    month: now.getMonth() + 1,
-                    year: now.getFullYear()
-                }),
-                headers: { 
-                    'Content-Type': 'application/json',
+            const url = `${APP_URL}?action=getMyAttendance&sessionToken=${encodeURIComponent(sessionToken)}&month=${now.getMonth() + 1}&year=${now.getFullYear()}`;
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
                     'Accept': 'application/json'
                 }
             });
@@ -391,7 +371,7 @@
         btn.disabled = false;
     }
     
-    // ============ VIEW ALL ATTENDANCE (ADMIN) ============
+    // ============ VIEW ALL ATTENDANCE (GET - ADMIN) ============
     async function viewAllAttendance() {
         if (!sessionToken) {
             showStatus('Login dulu!', 'error');
@@ -405,16 +385,11 @@
         
         try {
             const now = new Date();
-            const response = await fetch(APP_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: 'getAllAttendance',
-                    sessionToken: sessionToken,
-                    month: now.getMonth() + 1,
-                    year: now.getFullYear()
-                }),
-                headers: { 
-                    'Content-Type': 'application/json',
+            const url = `${APP_URL}?action=getAllAttendance&sessionToken=${encodeURIComponent(sessionToken)}&month=${now.getMonth() + 1}&year=${now.getFullYear()}`;
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
                     'Accept': 'application/json'
                 }
             });
@@ -513,12 +488,10 @@
         }, 10000);
     }
     
-    // ============ PLACEHOLDER FUNCTIONS ============
     function exportReport() {
         alert('📥 Fitur export akan segera hadir!\n\nSementara ini, Admin dapat:\n1. Buka spreadsheet\n2. Copy-paste data ke Excel');
     }
     
-    // ============ ENTER KEY FOR LOGIN ============
     document.getElementById('emailInput').addEventListener('keypress', function(e) {
         if (e.key === 'Enter') login();
     });
