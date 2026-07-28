@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Absensi Magang</title>
+    <title>Absensi Toko</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: Arial, sans-serif; padding: 15px; background: #f5f5f5; max-width: 500px; margin: auto; }
@@ -34,15 +34,13 @@
         .admin-only { display: none; }
         .hidden { display: none; }
         #lastPhoto img { max-width: 100%; max-height: 200px; border-radius: 8px; margin-top: 10px; border: 1px solid #ddd; }
-        .flex { display: flex; gap: 8px; }
-        .flex button { flex: 1; }
         .photo-preview { margin-top: 10px; text-align: center; }
     </style>
 </head>
 <body>
 
 <div class="container" id="loginSection">
-    <h2>🏪 Absensi Magang</h2>
+    <h2>🏪 Absensi Toko</h2>
     <p style="color:#666; margin-bottom:15px;">Login untuk melakukan absensi</p>
     <input type="email" id="emailInput" placeholder="Email karyawan">
     <button class="btn-primary" onclick="login()">🔑 Login</button>
@@ -74,7 +72,7 @@
 <script>
     // ============ KONFIGURASI ============
     // ⚠️ GANTI dengan URL Apps Script Anda (setelah deploy ulang)
-    const APP_URL = 'https://script.google.com/macros/s/AKfycbyeBqXABRsWDMnSIIhKlw_Khw7IZvKprYqj2vnh5_tE0fGQeN3_g6rZS1Otn-qawuri/exec';
+    const APP_URL = 'https://script.google.com/macros/s/AKfycbwzsecyNGaafFusvXCNJ0RpnFqMD-K_Wpj5uu_8gnP-r3cB1whYyIzVzYbnTDkNh_vp/exec';
     
     // ============ GLOBAL VARIABLES ============
     let sessionToken = null;
@@ -87,7 +85,7 @@
         localStorage.setItem('deviceId', deviceId);
     }
     
-    // ============ LOGIN (GET Method - CORS Friendly) ============
+    // ============ LOGIN (POST Method) ============
     async function login() {
         const email = document.getElementById('emailInput').value.trim();
         if (!email) {
@@ -101,15 +99,19 @@
         document.getElementById('loginStatus').innerHTML = '';
         
         try {
-            // 🔥 Login menggunakan GET (lebih aman untuk CORS)
-            const url = `${APP_URL}?action=login&email=${encodeURIComponent(email)}&deviceId=${encodeURIComponent(deviceId)}`;
-            console.log('📤 Login URL:', url);
+            console.log('📤 Login Request:', { email, deviceId });
             
-            const response = await fetch(url, {
-                method: 'GET',
+            const response = await fetch(APP_URL, {
+                method: 'POST',
                 headers: {
+                    'Content-Type': 'application/json',
                     'Accept': 'application/json'
-                }
+                },
+                body: JSON.stringify({
+                    action: 'login',
+                    email: email,
+                    deviceId: deviceId
+                })
             });
             
             const data = await response.json();
@@ -200,7 +202,7 @@
         });
     }
     
-    // ============ CHECK-IN (POST) ============
+    // ============ CHECK-IN ============
     async function checkIn() {
         if (!sessionToken) {
             showStatus('Login dulu!', 'error');
@@ -272,7 +274,7 @@
         btn.disabled = false;
     }
     
-    // ============ CHECK-OUT (POST) ============
+    // ============ CHECK-OUT ============
     async function checkOut() {
         if (!sessionToken) {
             showStatus('Login dulu!', 'error');
@@ -343,7 +345,7 @@
         btn.disabled = false;
     }
     
-    // ============ VIEW MY ATTENDANCE (GET) ============
+    // ============ VIEW MY ATTENDANCE ============
     async function viewMyAttendance() {
         if (!sessionToken) {
             showStatus('Login dulu!', 'error');
@@ -357,11 +359,16 @@
         
         try {
             const now = new Date();
-            const url = `${APP_URL}?action=getMyAttendance&sessionToken=${encodeURIComponent(sessionToken)}&month=${now.getMonth() + 1}&year=${now.getFullYear()}`;
-            
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: {
+            const response = await fetch(APP_URL, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'getMyAttendance',
+                    sessionToken: sessionToken,
+                    month: now.getMonth() + 1,
+                    year: now.getFullYear()
+                }),
+                headers: { 
+                    'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 }
             });
@@ -384,7 +391,7 @@
         btn.disabled = false;
     }
     
-    // ============ VIEW ALL ATTENDANCE (GET - ADMIN ONLY) ============
+    // ============ VIEW ALL ATTENDANCE (ADMIN) ============
     async function viewAllAttendance() {
         if (!sessionToken) {
             showStatus('Login dulu!', 'error');
@@ -398,11 +405,16 @@
         
         try {
             const now = new Date();
-            const url = `${APP_URL}?action=getAllAttendance&sessionToken=${encodeURIComponent(sessionToken)}&month=${now.getMonth() + 1}&year=${now.getFullYear()}`;
-            
-            const response = await fetch(url, {
-                method: 'GET',
-                headers: {
+            const response = await fetch(APP_URL, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'getAllAttendance',
+                    sessionToken: sessionToken,
+                    month: now.getMonth() + 1,
+                    year: now.getFullYear()
+                }),
+                headers: { 
+                    'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 }
             });
@@ -505,13 +517,6 @@
     function exportReport() {
         alert('📥 Fitur export akan segera hadir!\n\nSementara ini, Admin dapat:\n1. Buka spreadsheet\n2. Copy-paste data ke Excel');
     }
-    
-    // ============ AUTO-LOGIN CHECK ============
-    document.addEventListener('DOMContentLoaded', function() {
-        console.log('📱 Absensi App Ready');
-        console.log('🆔 Device ID:', deviceId);
-        console.log('📍 APP_URL:', APP_URL);
-    });
     
     // ============ ENTER KEY FOR LOGIN ============
     document.getElementById('emailInput').addEventListener('keypress', function(e) {
